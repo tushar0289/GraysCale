@@ -91,6 +91,12 @@ int main(void){
     dibHeader.size, dibHeader.width, dibHeader.height, dibHeader.planes, dibHeader.bitCount, dibHeader.compression, dibHeader.imageSize, dibHeader.xResolution, dibHeader.yResolution, dibHeader.colorUsed, dibHeader.colorImportant);
 
     Pixel **image = malloc(dibHeader.height * sizeof(Pixel *));
+    if(image == NULL){
+        printf("Memory allocation failed!\n");
+        fclose(fp);
+        return 1;
+    }
+
     for(int i = 0; i < dibHeader.height; i++)
         image[i] = malloc(dibHeader.width * sizeof(Pixel));
 
@@ -120,6 +126,29 @@ int main(void){
         fseek(fp, padding, SEEK_CUR);
     }
 
+    uint8_t **luminosity = malloc(dibHeader.height * sizeof(uint8_t *));
+    if(luminosity == NULL){
+        printf("Memory allocation failed!\n");
+        fclose(fp);
+        return 1;
+    }
+
+    for(int i = 0; i < dibHeader.height; i++)
+        luminosity[i] = malloc(dibHeader.width * sizeof(uint8_t));
+
+    uint16_t temp_lum;
+
+    for(int row = 0; row < dibHeader.height; row++){
+        for(int col = 0; col < dibHeader.width; col++){
+            temp_lum = (0.299 * image[row][col].data[2]) + (0.587 * image[row][col].data[1]) + (0.114 * image[row][col].data[0]);
+            if (temp_lum > 255)
+                luminosity[row][col] = 255;
+            else
+                luminosity[row][col] = temp_lum + 0.5;
+        }
+    }
+
+
     printf("\nPixel Data in RGB format\n\n");
 
     FILE *write = fopen("chain.txt", "w");
@@ -128,12 +157,30 @@ int main(void){
         return 1;
     }
 
+    printf("Pixel Data in Luminous value\n\n");
+
+    FILE *lumi = fopen("luminance.txt", "w");
+    if(lumi == NULL){
+        printf("Error Opening the File\n");
+        return 1;
+    }
+
 
     for(int row = 0; row < dibHeader.height; row++){
         for(int col = 0; col < dibHeader.width; col++)
-            fprintf(write, "%02X%02X%02X ", image[row][col].data[2], image[row][col].data[1], image[row][col].data[0]);
+            fprintf(lumi, "%d ", luminosity[row][col]);
+        fprintf(lumi, "\n");
+    }
+    fclose(lumi);
+
+
+    for(int row = 0; row < dibHeader.height; row++){
+        for(int col = 0; col < dibHeader.width; col++)
+            fprintf(write, "(%d, %d, %d) ", image[row][col].data[2], image[row][col].data[1], image[row][col].data[0]);
         fprintf(write, "\n");
     }
+    fclose(write);
+
 
     for(int i = 0; i < dibHeader.height; i++){
         for(int j = 0; j < dibHeader.width; j++){
@@ -146,11 +193,17 @@ int main(void){
     free(image);
     image = NULL;
 
+    for(int i = 0; i < dibHeader.height; i++){
+        free(luminosity[i]);
+        luminosity[i] = NULL;
+    }
+    free(luminosity);
+    luminosity = NULL;
+
     free(pixelData);
     pixelData = NULL;
 
     fclose(fp);
-    fclose(write);
-
+    
     return 0;
 }
