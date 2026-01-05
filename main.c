@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+
 #pragma pack(push, 1)
 typedef struct BMPFileHeader {
     uint16_t type;
@@ -57,11 +58,11 @@ int main(void){
     */
 
     printf("BMP File Header:\n"
-        "File Type: 0x%02X\n | "
-        "File Size: %u\n | "
-        "Reserved1: %u\n | "
-        "Reserved2: %u\n | "
-        "Offset: %u\n | ",
+        "File Type: 0x%02X\n"
+        "File Size: %u\n"
+        "Reserved1: %u\n"
+        "Reserved2: %u\n"
+        "Offset: %u\n",
     bmpFileHeader.type, bmpFileHeader.size, bmpFileHeader.reserved1, bmpFileHeader.reserved2, bmpFileHeader.offset);
 
     printf("\n");
@@ -136,15 +137,15 @@ int main(void){
     for(int i = 0; i < dibHeader.height; i++)
         luminosity[i] = malloc(dibHeader.width * sizeof(uint8_t));
 
-    uint16_t temp_lum;
+    double temp_lum;
 
     for(int row = 0; row < dibHeader.height; row++){
         for(int col = 0; col < dibHeader.width; col++){
             temp_lum = (0.299 * image[row][col].data[2]) + (0.587 * image[row][col].data[1]) + (0.114 * image[row][col].data[0]);
-            if (temp_lum > 255)
+            if (temp_lum >= 255.0)
                 luminosity[row][col] = 255;
             else
-                luminosity[row][col] = temp_lum + 0.5;
+                luminosity[row][col] = (uint8_t) (temp_lum + 0.5);
         }
     }
 
@@ -165,12 +166,81 @@ int main(void){
         return 1;
     }
 
-
     for(int row = 0; row < dibHeader.height; row++){
         for(int col = 0; col < dibHeader.width; col++)
             fprintf(lumi, "%d ", luminosity[row][col]);
         fprintf(lumi, "\n");
     }
+
+
+    FILE *fgray = fopen("grayscale.bmp", "wb");
+    BMPFileHeader grayscaleFileHeader = bmpFileHeader;
+    BMPInfoHeader grayscaleInfoHeader = dibHeader;
+
+    grayscaleInfoHeader.bitCount = 8;
+    grayscaleInfoHeader.size = 40;
+
+    uint32_t grayscale_row_width= (grayscaleInfoHeader.width + 3) / 4 * 4;
+    uint8_t grayscale_padding = grayscale_row_width - grayscaleInfoHeader.width;
+
+    grayscaleInfoHeader.imageSize = grayscale_row_width * grayscaleInfoHeader.height;
+
+    grayscaleFileHeader.offset = 1024 + sizeof(BMPFileHeader) + sizeof(BMPInfoHeader);
+
+    grayscaleFileHeader.size = grayscaleFileHeader.offset + grayscaleInfoHeader.imageSize;
+    
+
+    fwrite(&grayscaleFileHeader, sizeof(BMPFileHeader), 1, fgray);
+    fwrite(&grayscaleInfoHeader, sizeof(BMPInfoHeader), 1, fgray);
+
+    uint8_t colorTable[256][4];
+    for(int i = 0; i < 256; i++){
+        colorTable[i][0] = i;
+        colorTable[i][1] = i;
+        colorTable[i][2] = i;
+        colorTable[i][3] = 0;
+    }
+
+    fwrite(colorTable, sizeof(uint8_t), 256 * 4, fgray);
+
+
+    uint8_t gray_padding = 0;
+    for(int row = 0; row < grayscaleInfoHeader.height; row++){
+        int reversed_row = (grayscaleInfoHeader.height - 1) - row;
+        for(int col = 0; col < grayscaleInfoHeader.width; col++)
+            fwrite(&luminosity[reversed_row][col], 1, 1, fgray);
+        for(int p = 0; p < grayscale_padding; p++)
+            fwrite(&gray_padding, 1, 1, fgray);
+    }
+
+    printf("Grayscale File Header:\n"
+        "File Type: 0x%02X\n"
+        "File Size: %u\n"
+        "Reserved1: %u\n"
+        "Reserved2: %u\n"
+        "Offset: %u\n",
+    grayscaleFileHeader.type, grayscaleFileHeader.size, grayscaleFileHeader.reserved1, grayscaleFileHeader.reserved2, grayscaleFileHeader.offset);
+
+    printf("\n");
+
+    printf("Grayscale BMP Info Header:\n"
+        "Size of the Info header: %u\n"
+        "Width of the image: %d\n"
+        "height of the image: %d\n"
+        "Planes: %u\n"
+        "Bit Count: %u\n"
+        "Compression: %u\n"
+        "Image Size: %u\n"
+        "x Resolution: %d\n"
+        "y Resolution: %d\n"
+        "Color Used: %u\n"
+        "Color Important: %u\n",
+    grayscaleInfoHeader.size, grayscaleInfoHeader.width, grayscaleInfoHeader.height, grayscaleInfoHeader.planes, grayscaleInfoHeader.bitCount, grayscaleInfoHeader.compression, grayscaleInfoHeader.imageSize, grayscaleInfoHeader.xResolution, grayscaleInfoHeader.yResolution, grayscaleInfoHeader.colorUsed, grayscaleInfoHeader.colorImportant);
+
+    fclose(fgray);
+
+    
+
     fclose(lumi);
 
 
@@ -204,6 +274,6 @@ int main(void){
     pixelData = NULL;
 
     fclose(fp);
-    
+
     return 0;
 }
