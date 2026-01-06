@@ -1,7 +1,9 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
+uint8_t nearest_ascii_shade(float pixel_value, int ramp_length);
 
 #pragma pack(push, 1)
 typedef struct BMPFileHeader {
@@ -239,7 +241,65 @@ int main(void){
 
     fclose(fgray);
 
-    
+
+    // dither grayscale
+
+    FILE *fdither = fopen("dither.bmp", "wb");
+
+    BMPFileHeader ditherFileHeader = grayscaleFileHeader;
+    fwrite(&ditherFileHeader, sizeof(BMPFileHeader), 1, fdither);
+    BMPInfoHeader ditherInfoHeader = grayscaleInfoHeader;
+    fwrite(&ditherInfoHeader, sizeof(BMPInfoHeader), 1, fdither);
+    fwrite(colorTable, sizeof(uint8_t), 256 * 4, fdither);
+
+
+    const char *ascii_ramp = "$@B%8&WM#*oahkbdpqwmZO0QLCJUYXzcvunxrjft/\\|()1{}[]?-_+~<>i!lI;:,\"^`'.";
+
+    float **dither_buffer = (float **) malloc(ditherInfoHeader.height * sizeof(float *));
+    for(int i = 0; i < ditherInfoHeader.height; i++){
+        dither_buffer[i] = (float *) malloc(ditherInfoHeader.width * sizeof(float));
+        for(int j = 0; j < ditherInfoHeader.width; j++)
+            dither_buffer[i][j] = (float) luminosity[i][j];
+    }
+
+    int ramp_length = strlen(ascii_ramp);
+
+    uint8_t dither_padding = 0;
+    for(int row = 0; row < ditherInfoHeader.height; row++){
+
+        int current_y = (ditherInfoHeader.height - 1) - row;
+        int next_y = current_y - 1;
+
+        for(int col = 0; col < ditherInfoHeader.width; col++){
+            float old_pixel = dither_buffer[current_y][col];
+
+            uint8_t quantized_val = nearest_ascii_shade(old_pixel, ramp_length);
+            dither_buffer[current_y][col] = quantized_val;
+
+            fwrite(&quantized_val, 1, 1, fdither);
+
+            float error = old_pixel - (float) (quantized_val);
+
+            if(col + 1 < ditherInfoHeader.width)
+                dither_buffer[current_y][col + 1] += error * 7.0f / 16.0f;
+
+            if(next_y >= 0){
+                if(col - 1 >= 0)
+                    dither_buffer[next_y][col - 1] += error * 3.0f/ 16.0f; 
+                dither_buffer[next_y][col] += error * 5.0f/ 16.0f;
+                if(col + 1 < ditherInfoHeader.width)
+                    dither_buffer[next_y][col + 1] += error * 1.0f / 16.0f;
+            }
+        }
+        for(int p = 0; p < grayscale_padding; p++)
+            fwrite(&dither_padding, 1, 1, fdither);
+    }
+
+    for(int i = 0; i < ditherInfoHeader.height; i++)
+        free(dither_buffer[i]);
+    free(dither_buffer);
+
+    fclose(fdither);
 
     fclose(lumi);
 
@@ -276,4 +336,15 @@ int main(void){
     fclose(fp);
 
     return 0;
+}
+
+uint8_t nearest_ascii_shade(float pixel_value, int ramp_length){
+    if(pixel_value < 0)
+        pixel_value = 0;
+    if(pixel_value > 255)
+        pixel_value = 255;
+    
+    int index = (int) (pixel_value / 255.0f * (ramp_length - 1) + 0.5f);
+
+    return (uint8_t) (255.0f * index /(ramp_length - 1));
 }
