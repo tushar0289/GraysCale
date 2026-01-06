@@ -295,6 +295,30 @@ int main(void){
             fwrite(&dither_padding, 1, 1, fdither);
     }
 
+    FILE *fascii = fopen("ascii_img.txt", "wb");
+
+    for(int row = 0; row < ditherInfoHeader.height; row++){
+
+        int current_y = row;
+        int next_y = current_y - 1;
+
+        for(int col = 0; col < ditherInfoHeader.width; col++){
+            float old_pixel = dither_buffer[current_y][col];
+
+            uint8_t quantized_val = nearest_ascii_shade(old_pixel, ramp_length);
+
+            if(row % 2 == 0){
+                int ramp_idx = (int) ((float)quantized_val / 255.0f * (ramp_length - 1) + 0.5f);
+                fputc(ascii_ramp[ramp_idx], fascii);
+            }
+            float error = old_pixel - (float) quantized_val;
+        }
+        if(row % 2 == 0)
+            fputc('\n', fascii);
+    }
+
+    fclose(fascii);
+
     for(int i = 0; i < ditherInfoHeader.height; i++)
         free(dither_buffer[i]);
     free(dither_buffer);
